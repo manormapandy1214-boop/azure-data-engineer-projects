@@ -1,0 +1,15 @@
+{
+	"name": "azure-resouce-group1",
+	"properties": {
+		"trustModeClaimForMi": {
+			"value": "Disabled",
+			"editable": true
+		}
+	},
+	"location": "centralindia",
+	"identity": {
+		"type": "SystemAssigned",
+		"principalId": "2d9d0956-5dea-4dbb-8bf2-6dfc4150e165",
+		"tenantId": "aa30f10b-446a-4ef1-9f98-957bfa9f75e8"
+	}
+}
