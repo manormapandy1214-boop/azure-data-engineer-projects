@@ -1,0 +1,17 @@
+{
+	"name": "scd1 implement",
+	"properties": {
+		"content": {
+			"query": "---create schmea--\nCREATE SCHEMA stg;\nGO\nCREATE SCHEMA dw;\nGO\n\n---create source table--\n\nCREATE TABLE stg.Customer\n(\n    CustomerID   INT,\n    CustomerName NVARCHAR(100),\n    City         NVARCHAR(50),\n    Email        NVARCHAR(100)\n)\nWITH (DISTRIBUTION = ROUND_ROBIN, HEAP);\n\nINSERT INTO stg.Customer VALUES (1, 'Amit',  'Pune',   'amit@mail.com');\nINSERT INTO stg.Customer VALUES (2, 'Neha',  'Mumbai', 'neha@mail.com');\nINSERT INTO stg.Customer VALUES (3, 'Rahul', 'Delhi',  'rahul@mail.com');\n\nselect *from stg.Customer\n\n\n---create datawarehouse table---\n\nCREATE TABLE dw.DimCustomer\n(\n    CustomerKey   INT IDENTITY(1,1) NOT NULL,   -- surrogate key\n    CustomerID    INT NOT NULL,                 -- business key\n    CustomerName  NVARCHAR(100),\n    City          NVARCHAR(50),\n    Email         NVARCHAR(100),\n    LoadDate      DATETIME2,\n    UpdatedDate   DATETIME2\n)\nWITH (DISTRIBUTION = REPLICATE, CLUSTERED INDEX (CustomerID));\n\n\n--- change source table data---\nupdate stg.Customer set city='banglore' where CustomerID=1;\ninsert into stg.Customer VALUES(4,'priya','nagpur','priya@mail.com');\n\n---chnage scd1 overwrite--\n\nMERGE dw.DimCustomer AS T\nUSING stg.Customer AS S\nON T.CustomerID = S.CustomerID\n\nWHEN MATCHED\nAND (\n       ISNULL(T.CustomerName,'') <> ISNULL(S.CustomerName,'')\n    OR ISNULL(T.City,'')         <> ISNULL(S.City,'')\n    OR ISNULL(T.Email,'')        <> ISNULL(S.Email,'')\n)\nTHEN\n    UPDATE SET\n        T.CustomerName = S.CustomerName,\n        T.City         = S.City,\n        T.Email        = S.Email,\n        T.UpdatedDate  = GETDATE()\n\nWHEN NOT MATCHED BY TARGET\nTHEN\n    INSERT\n    (\n        CustomerID,\n        CustomerName,\n        City,\n        Email,\n        LoadDate,\n        UpdatedDate\n    )\n    VALUES\n    (\n        S.CustomerID,\n        S.CustomerName,\n        S.City,\n        S.Email,\n        GETDATE(),\n        GETDATE()\n    );",
+			"metadata": {
+				"language": "sql"
+			},
+			"currentConnection": {
+				"databaseName": "sql_pool",
+				"poolName": "sql_pool"
+			},
+			"resultLimit": 5000
+		},
+		"type": "SqlQuery"
+	}
+}

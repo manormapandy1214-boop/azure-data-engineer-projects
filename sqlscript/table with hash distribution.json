@@ -1,0 +1,17 @@
+{
+	"name": "table with hash distribution",
+	"properties": {
+		"content": {
+			"query": "create table dbo.factsales\n(\n    salesid BIGINT,customerid int,productid int,salesdate date,amount decimal(18,2)\n    )\n    with \n    (\n    DISTRIBUTION=hash(customerid),\n     clustered columnstore index\n    );\n    GO\n\n\n---insert some data--\nINSERT INTO dbo.FactSales\nVALUES\n(2,102,1002,'2026-10-02',750.00);\n\nselect * from factsales\n---chcekdata store in columnr format--\nSELECT\n    t.name AS TableName,\n    i.name AS IndexName,\n    i.type_desc\nFROM sys.tables t\nINNER JOIN sys.indexes i\n    ON t.object_id = i.object_id\nWHERE t.name = 'FactSales';",
+			"metadata": {
+				"language": "sql"
+			},
+			"currentConnection": {
+				"databaseName": "sql_pool",
+				"poolName": "sql_pool"
+			},
+			"resultLimit": 5000
+		},
+		"type": "SqlQuery"
+	}
+}

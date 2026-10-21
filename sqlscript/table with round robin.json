@@ -1,0 +1,17 @@
+{
+	"name": "table with round robin",
+	"properties": {
+		"content": {
+			"query": "CREATE TABLE dbo.RoundRobinTable\n(\n    TransactionID BIGINT,\n    CustomerID INT,\n    ProductID INT,\n    Amount DECIMAL(10,2),\n    EventDate DATE\n)\nWITH\n(\n    DISTRIBUTION = ROUND_ROBIN,\n    CLUSTERED COLUMNSTORE INDEX\n);\n\nINSERT INTO dbo.RoundRobinTable\nVALUES\n(1005, 105, 505, 4200.00, '2026-10-05');\n(1004, 104, 504, 1800.25, '2026-10-04')\n(1003, 103, 503, 3500.75, '2026-10-03'),\n(1002, 102, 502, 1200.00, '2026-10-02'),\n(1001, 101, 501, 2500.50, '2026-10-01');\n\n\nSELECT * \nFROM dbo.RoundRobinTable;",
+			"metadata": {
+				"language": "sql"
+			},
+			"currentConnection": {
+				"databaseName": "sql_pool",
+				"poolName": "sql_pool"
+			},
+			"resultLimit": 5000
+		},
+		"type": "SqlQuery"
+	}
+}

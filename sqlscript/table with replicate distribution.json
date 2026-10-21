@@ -1,0 +1,17 @@
+{
+	"name": "table with replicate distribution",
+	"properties": {
+		"content": {
+			"query": "CREATE TABLE dbo.DimProduct\n(\n    ProductID INT,\n    ProductName VARCHAR(100),\n    Category VARCHAR(50)\n)\nWITH\n(\n    DISTRIBUTION = REPLICATE,\n    CLUSTERED COLUMNSTORE INDEX\n);\n\nINSERT INTO dbo.DimProduct\nVALUES\n\n\n\n(104, 'Table', 'Furniture');\n\n\nSELECT\n    t.name AS TableName,\n    i.name AS IndexName,\n    i.type_desc\nFROM sys.tables t\nINNER JOIN sys.indexes i\n    ON t.object_id = i.object_id\nWHERE t.name = 'dimproduct';",
+			"metadata": {
+				"language": "sql"
+			},
+			"currentConnection": {
+				"databaseName": "sql_pool",
+				"poolName": "sql_pool"
+			},
+			"resultLimit": 5000
+		},
+		"type": "SqlQuery"
+	}
+}
