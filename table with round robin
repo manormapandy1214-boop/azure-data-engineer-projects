@@ -1,0 +1,25 @@
+CREATE TABLE dbo.RoundRobinTable
+(
+    TransactionID BIGINT,
+    CustomerID INT,
+    ProductID INT,
+    Amount DECIMAL(10,2),
+    EventDate DATE
+)
+WITH
+(
+    DISTRIBUTION = ROUND_ROBIN,
+    CLUSTERED COLUMNSTORE INDEX
+);
+
+INSERT INTO dbo.RoundRobinTable
+VALUES
+(1005, 105, 505, 4200.00, '2026-10-05');
+(1004, 104, 504, 1800.25, '2026-10-04')
+(1003, 103, 503, 3500.75, '2026-10-03'),
+(1002, 102, 502, 1200.00, '2026-10-02'),
+(1001, 101, 501, 2500.50, '2026-10-01');
+
+
+SELECT * 
+FROM dbo.RoundRobinTable;
