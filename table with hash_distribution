@@ -1,0 +1,29 @@
+---create table ---
+
+create table dbo.factsales
+(
+    salesid BIGINT,customerid int,productid int,salesdate date,amount decimal(18,2)
+    )
+    with 
+    (
+    DISTRIBUTION=hash(customerid),
+     clustered columnstore index
+    );
+    GO
+
+
+---insert some data--
+INSERT INTO dbo.FactSales
+VALUES
+(2,102,1002,'2026-10-02',750.00);
+
+select * from factsales
+---chcek the data store in columnr format--
+SELECT
+    t.name AS TableName,
+    i.name AS IndexName,
+    i.type_desc
+FROM sys.tables t
+INNER JOIN sys.indexes i
+    ON t.object_id = i.object_id
+WHERE t.name = 'FactSales';
