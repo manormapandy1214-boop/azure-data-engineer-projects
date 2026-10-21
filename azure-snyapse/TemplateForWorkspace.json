@@ -1,0 +1,585 @@
+{
+	"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"workspaceName": {
+			"type": "string",
+			"metadata": "Workspace name",
+			"defaultValue": "azure-snyapse"
+		},
+		"AzureDataLakeStorage1_accountKey": {
+			"type": "secureString",
+			"metadata": "Secure string for 'accountKey' of 'AzureDataLakeStorage1'"
+		},
+		"azure-snyapse-WorkspaceDefaultSqlServer_connectionString": {
+			"type": "secureString",
+			"metadata": "Secure string for 'connectionString' of 'azure-snyapse-WorkspaceDefaultSqlServer'",
+			"defaultValue": "Integrated Security=False;Encrypt=True;Connection Timeout=30;Data Source=tcp:azure-snyapse.sql.azuresynapse.net,1433;Initial Catalog=@{linkedService().DBName}"
+		},
+		"AzureDataLakeStorage1_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "https://synapase.dfs.core.windows.net/"
+		},
+		"HttpServer1_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "https://raw.githubusercontent.com/"
+		},
+		"azure-snyapse-WorkspaceDefaultStorage_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "https://synapase.dfs.core.windows.net"
+		}
+	},
+	"variables": {
+		"workspaceId": "[concat('Microsoft.Synapse/workspaces/', parameters('workspaceName'))]"
+	},
+	"resources": [
+		{
+			"name": "[concat(parameters('workspaceName'), '/sparkpool')]",
+			"type": "Microsoft.Synapse/workspaces/bigDataPools",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"annotations": []
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/copy_api_to_bronze_layer')]",
+			"type": "Microsoft.Synapse/workspaces/pipelines",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"activities": [
+					{
+						"name": "copy_api_data_to_bronze_layer",
+						"type": "Copy",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "JsonSource",
+								"storeSettings": {
+									"type": "HttpReadSettings",
+									"requestMethod": "GET"
+								},
+								"formatSettings": {
+									"type": "JsonReadSettings"
+								}
+							},
+							"sink": {
+								"type": "ParquetSink",
+								"storeSettings": {
+									"type": "AzureBlobFSWriteSettings"
+								},
+								"formatSettings": {
+									"type": "ParquetWriteSettings"
+								}
+							},
+							"enableStaging": false
+						},
+						"inputs": [
+							{
+								"referenceName": "Json1",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "Parquet_bronzelayer",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						]
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"annotations": [],
+				"lastPublishTime": "2026-10-19T10:32:21Z"
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/datasets/Json1')]",
+				"[concat(variables('workspaceId'), '/datasets/Parquet_bronzelayer')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/Json1')]",
+			"type": "Microsoft.Synapse/workspaces/datasets",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "HttpServer1",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "Json",
+				"typeProperties": {
+					"location": {
+						"type": "HttpServerLocation",
+						"relativeUrl": "manormapandy1214-boop/azure-data-engineer-projects/main/retail_transactions_bronze.json"
+					}
+				},
+				"schema": {}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/linkedServices/HttpServer1')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/Parquet_bronzelayer')]",
+			"type": "Microsoft.Synapse/workspaces/datasets",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "AzureDataLakeStorage1",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "Parquet",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": "Bronze",
+						"fileSystem": "synapse-filename"
+					},
+					"compressionCodec": "snappy"
+				},
+				"schema": []
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/linkedServices/AzureDataLakeStorage1')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/AzureDataLakeStorage1')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"annotations": [],
+				"type": "AzureBlobFS",
+				"typeProperties": {
+					"url": "[parameters('AzureDataLakeStorage1_properties_typeProperties_url')]",
+					"accountKey": {
+						"type": "SecureString",
+						"value": "[parameters('AzureDataLakeStorage1_accountKey')]"
+					}
+				},
+				"connectVia": {
+					"referenceName": "AutoResolveIntegrationRuntime",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/integrationRuntimes/AutoResolveIntegrationRuntime')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/HttpServer1')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"annotations": [],
+				"type": "HttpServer",
+				"typeProperties": {
+					"url": "[parameters('HttpServer1_properties_typeProperties_url')]",
+					"enableServerCertificateValidation": true,
+					"authenticationType": "Anonymous"
+				},
+				"connectVia": {
+					"referenceName": "AutoResolveIntegrationRuntime",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/integrationRuntimes/AutoResolveIntegrationRuntime')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/azure-snyapse-WorkspaceDefaultSqlServer')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"parameters": {
+					"DBName": {
+						"type": "String"
+					}
+				},
+				"annotations": [],
+				"type": "AzureSqlDW",
+				"typeProperties": {
+					"connectionString": "[parameters('azure-snyapse-WorkspaceDefaultSqlServer_connectionString')]"
+				},
+				"connectVia": {
+					"referenceName": "AutoResolveIntegrationRuntime",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/integrationRuntimes/AutoResolveIntegrationRuntime')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/azure-snyapse-WorkspaceDefaultStorage')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"annotations": [],
+				"type": "AzureBlobFS",
+				"typeProperties": {
+					"url": "[parameters('azure-snyapse-WorkspaceDefaultStorage_properties_typeProperties_url')]"
+				},
+				"connectVia": {
+					"referenceName": "AutoResolveIntegrationRuntime",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/integrationRuntimes/AutoResolveIntegrationRuntime')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/AutoResolveIntegrationRuntime')]",
+			"type": "Microsoft.Synapse/workspaces/integrationRuntimes",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"type": "Managed",
+				"typeProperties": {
+					"computeProperties": {
+						"location": "AutoResolve",
+						"dataFlowProperties": {
+							"computeType": "General",
+							"coreCount": 8,
+							"timeToLive": 0
+						}
+					}
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/WorkspaceSystemIdentity')]",
+			"type": "Microsoft.Synapse/workspaces/credentials",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"type": "ManagedIdentity",
+				"typeProperties": {}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/scd1 implement')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "---create schmea--\nCREATE SCHEMA stg;\nGO\nCREATE SCHEMA dw;\nGO\n\n---create source table--\n\nCREATE TABLE stg.Customer\n(\n    CustomerID   INT,\n    CustomerName NVARCHAR(100),\n    City         NVARCHAR(50),\n    Email        NVARCHAR(100)\n)\nWITH (DISTRIBUTION = ROUND_ROBIN, HEAP);\n\nINSERT INTO stg.Customer VALUES (1, 'Amit',  'Pune',   'amit@mail.com');\nINSERT INTO stg.Customer VALUES (2, 'Neha',  'Mumbai', 'neha@mail.com');\nINSERT INTO stg.Customer VALUES (3, 'Rahul', 'Delhi',  'rahul@mail.com');\n\nselect *from stg.Customer\n\n\n---create datawarehouse table---\n\nCREATE TABLE dw.DimCustomer\n(\n    CustomerKey   INT IDENTITY(1,1) NOT NULL,   -- surrogate key\n    CustomerID    INT NOT NULL,                 -- business key\n    CustomerName  NVARCHAR(100),\n    City          NVARCHAR(50),\n    Email         NVARCHAR(100),\n    LoadDate      DATETIME2,\n    UpdatedDate   DATETIME2\n)\nWITH (DISTRIBUTION = REPLICATE, CLUSTERED INDEX (CustomerID));\n\n\n--- change source table data---\nupdate stg.Customer set city='banglore' where CustomerID=1;\ninsert into stg.Customer VALUES(4,'priya','nagpur','priya@mail.com');\n\n---chnage scd1 overwrite--\n\nMERGE dw.DimCustomer AS T\nUSING stg.Customer AS S\nON T.CustomerID = S.CustomerID\n\nWHEN MATCHED\nAND (\n       ISNULL(T.CustomerName,'') <> ISNULL(S.CustomerName,'')\n    OR ISNULL(T.City,'')         <> ISNULL(S.City,'')\n    OR ISNULL(T.Email,'')        <> ISNULL(S.Email,'')\n)\nTHEN\n    UPDATE SET\n        T.CustomerName = S.CustomerName,\n        T.City         = S.City,\n        T.Email        = S.Email,\n        T.UpdatedDate  = GETDATE()\n\nWHEN NOT MATCHED BY TARGET\nTHEN\n    INSERT\n    (\n        CustomerID,\n        CustomerName,\n        City,\n        Email,\n        LoadDate,\n        UpdatedDate\n    )\n    VALUES\n    (\n        S.CustomerID,\n        S.CustomerName,\n        S.City,\n        S.Email,\n        GETDATE(),\n        GETDATE()\n    );",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"databaseName": "sql_pool",
+						"poolName": "sql_pool"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/table with hash distribution')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "create table dbo.factsales\n(\n    salesid BIGINT,customerid int,productid int,salesdate date,amount decimal(18,2)\n    )\n    with \n    (\n    DISTRIBUTION=hash(customerid),\n     clustered columnstore index\n    );\n    GO\n\n\n---insert some data--\nINSERT INTO dbo.FactSales\nVALUES\n(2,102,1002,'2026-10-02',750.00);\n\nselect * from factsales\n---chcekdata store in columnr format--\nSELECT\n    t.name AS TableName,\n    i.name AS IndexName,\n    i.type_desc\nFROM sys.tables t\nINNER JOIN sys.indexes i\n    ON t.object_id = i.object_id\nWHERE t.name = 'FactSales';",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"databaseName": "sql_pool",
+						"poolName": "sql_pool"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/table with replicate distribution')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "CREATE TABLE dbo.DimProduct\n(\n    ProductID INT,\n    ProductName VARCHAR(100),\n    Category VARCHAR(50)\n)\nWITH\n(\n    DISTRIBUTION = REPLICATE,\n    CLUSTERED COLUMNSTORE INDEX\n);\n\nINSERT INTO dbo.DimProduct\nVALUES\n\n\n\n(104, 'Table', 'Furniture');\n\n\nSELECT\n    t.name AS TableName,\n    i.name AS IndexName,\n    i.type_desc\nFROM sys.tables t\nINNER JOIN sys.indexes i\n    ON t.object_id = i.object_id\nWHERE t.name = 'dimproduct';",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"databaseName": "sql_pool",
+						"poolName": "sql_pool"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/table with round robin')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "CREATE TABLE dbo.RoundRobinTable\n(\n    TransactionID BIGINT,\n    CustomerID INT,\n    ProductID INT,\n    Amount DECIMAL(10,2),\n    EventDate DATE\n)\nWITH\n(\n    DISTRIBUTION = ROUND_ROBIN,\n    CLUSTERED COLUMNSTORE INDEX\n);\n\nINSERT INTO dbo.RoundRobinTable\nVALUES\n(1005, 105, 505, 4200.00, '2026-10-05');\n(1004, 104, 504, 1800.25, '2026-10-04')\n(1003, 103, 503, 3500.75, '2026-10-03'),\n(1002, 102, 502, 1200.00, '2026-10-02'),\n(1001, 101, 501, 2500.50, '2026-10-01');\n\n\nSELECT * \nFROM dbo.RoundRobinTable;",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"databaseName": "sql_pool",
+						"poolName": "sql_pool"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/scd1 implement')]",
+			"type": "Microsoft.Synapse/workspaces/notebooks",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"nbformat": 4,
+				"nbformat_minor": 2,
+				"bigDataPool": {
+					"referenceName": "sparkpool",
+					"type": "BigDataPoolReference"
+				},
+				"sessionProperties": {
+					"driverMemory": "28g",
+					"driverCores": 4,
+					"executorMemory": "28g",
+					"executorCores": 4,
+					"numExecutors": 2,
+					"conf": {
+						"spark.dynamicAllocation.enabled": "false",
+						"spark.dynamicAllocation.minExecutors": "2",
+						"spark.dynamicAllocation.maxExecutors": "2",
+						"spark.autotune.trackingId": "e3fdc835-e239-487e-8678-efa4e5c0a812"
+					}
+				},
+				"metadata": {
+					"saveOutput": true,
+					"enableDebugMode": false,
+					"kernelspec": {
+						"name": "synapse_pyspark",
+						"display_name": "Synapse PySpark"
+					},
+					"language_info": {
+						"name": "python"
+					},
+					"a365ComputeOptions": {
+						"id": "/subscriptions/a18b1a9d-1b3c-449a-b890-10e1ea988a8b/resourceGroups/adf_resouce_group/providers/Microsoft.Synapse/workspaces/azure-snyapse/bigDataPools/sparkpool",
+						"name": "sparkpool",
+						"type": "Spark",
+						"endpoint": "https://azure-snyapse.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/sparkpool",
+						"auth": {
+							"type": "AAD",
+							"authResource": "https://dev.azuresynapse.net"
+						},
+						"sparkVersion": "3.5",
+						"nodeCount": 10,
+						"cores": 4,
+						"memory": 28,
+						"automaticScaleJobs": false
+					},
+					"sessionKeepAliveTimeout": 30
+				},
+				"cells": [
+					{
+						"cell_type": "code",
+						"metadata": {
+							"microsoft": {
+								"language": "sparksql"
+							},
+							"collapsed": false
+						},
+						"source": [
+							"%%sql\n",
+							"CREATE TABLE IF NOT EXISTS dim_customer_scd1 (\n",
+							"    CustomerID   INT,\n",
+							"    CustomerName STRING,\n",
+							"    City         STRING\n",
+							")\n",
+							"USING DELTA;"
+						],
+						"outputs": [],
+						"execution_count": 12
+					},
+					{
+						"cell_type": "code",
+						"metadata": {
+							"microsoft": {
+								"language": "sparksql"
+							},
+							"collapsed": false
+						},
+						"source": [
+							"%%sql\n",
+							"INSERT INTO dim_customer_scd1 VALUES\n",
+							"(101, 'Amit',  'Pune'),\n",
+							"(102, 'Neha',  'Mumbai'),\n",
+							"(103, 'Rahul', 'Delhi');"
+						],
+						"outputs": [],
+						"execution_count": 13
+					},
+					{
+						"cell_type": "code",
+						"metadata": {
+							"microsoft": {
+								"language": "sparksql"
+							},
+							"collapsed": false
+						},
+						"source": [
+							"%%sql\n",
+							"CREATE OR REPLACE TEMP VIEW source_customer AS\n",
+							"SELECT 101 AS CustomerID, 'Amit'  AS CustomerName, 'Bangalore' AS City\n",
+							"UNION ALL\n",
+							"SELECT 104, 'Priya', 'Chennai';"
+						],
+						"outputs": [],
+						"execution_count": 14
+					},
+					{
+						"cell_type": "code",
+						"metadata": {
+							"microsoft": {
+								"language": "sparksql"
+							},
+							"collapsed": false
+						},
+						"source": [
+							"%%sql\n",
+							"MERGE INTO dim_customer_scd1 AS tgt\n",
+							"USING source_customer AS src\n",
+							"ON tgt.CustomerID = src.CustomerID\n",
+							"\n",
+							"WHEN MATCHED AND (tgt.CustomerName <> src.CustomerName OR tgt.City <> src.City)\n",
+							"THEN UPDATE SET\n",
+							"    tgt.CustomerName = src.CustomerName,\n",
+							"    tgt.City         = src.City\n",
+							"\n",
+							"WHEN NOT MATCHED THEN INSERT (CustomerID, CustomerName, City)\n",
+							"VALUES (src.CustomerID, src.CustomerName, src.City);"
+						],
+						"outputs": [],
+						"execution_count": 15
+					},
+					{
+						"cell_type": "code",
+						"metadata": {
+							"microsoft": {
+								"language": "sparksql"
+							},
+							"collapsed": false
+						},
+						"source": [
+							"%%sql\n",
+							"SELECT * FROM dim_customer_scd1 ORDER BY CustomerID;"
+						],
+						"outputs": [],
+						"execution_count": 17
+					},
+					{
+						"cell_type": "code",
+						"metadata": {
+							"microsoft": {
+								"language": "python"
+							}
+						},
+						"source": [
+							"%%pyspark\n",
+							"import com.microsoft.spark.sqlanalytics\n",
+							"from com.microsoft.spark.sqlanalytics.Constants import Constants\n",
+							"\n",
+							"df = spark.table(\"dim_customer_scd1\")\n",
+							"\n",
+							"df.write \\\n",
+							"  .mode(\"overwrite\") \\\n",
+							"  .synapsesql(\"sql_pool.dw.DimCustomer_SCD1\")"
+						],
+						"outputs": [],
+						"execution_count": 24
+					},
+					{
+						"cell_type": "code",
+						"metadata": {
+							"microsoft": {
+								"language": "python"
+							}
+						},
+						"source": [
+							"%%pyspark\n",
+							"df = spark.read.synapsesql(\"sql_pool.dw.DimCustomer_SCD1\")\n",
+							"df.show()\n",
+							"                  \n",
+							"\n",
+							""
+						],
+						"outputs": [],
+						"execution_count": 30
+					}
+				]
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/sparkpool')]",
+			"type": "Microsoft.Synapse/workspaces/bigDataPools",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"autoPause": {
+					"enabled": true,
+					"delayInMinutes": 10
+				},
+				"autoScale": {
+					"enabled": true,
+					"maxNodeCount": 4,
+					"minNodeCount": 3
+				},
+				"nodeCount": 10,
+				"nodeSize": "Small",
+				"nodeSizeFamily": "MemoryOptimized",
+				"sparkVersion": "3.5",
+				"isComputeIsolationEnabled": false,
+				"sessionLevelPackagesEnabled": false,
+				"annotations": []
+			},
+			"dependsOn": [],
+			"location": "centralindia"
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/sql_pool')]",
+			"type": "Microsoft.Synapse/workspaces/sqlPools",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"collation": "SQL_Latin1_General_CP1_CI_AS",
+				"maxSizeBytes": 263882790666240,
+				"annotations": []
+			},
+			"dependsOn": [],
+			"location": "centralindia"
+		}
+	]
+}
