@@ -17,7 +17,7 @@
 				"spark.dynamicAllocation.enabled": "false",
 				"spark.dynamicAllocation.minExecutors": "2",
 				"spark.dynamicAllocation.maxExecutors": "2",
-				"spark.autotune.trackingId": "19861b01-d23a-4753-b292-48735ab3aa6d"
+				"spark.autotune.trackingId": "ffc52d6f-f920-4086-8b34-6c2c2a75d591"
 			}
 		},
 		"metadata": {
@@ -91,7 +91,7 @@
 					"display(dim_raw)\n",
 					"display(fact_raw)"
 				],
-				"execution_count": 13
+				"execution_count": 34
 			},
 			{
 				"cell_type": "code",
@@ -100,7 +100,7 @@
 					"dim_raw.printSchema()\n",
 					"fact_raw.printSchema()"
 				],
-				"execution_count": 15
+				"execution_count": 35
 			},
 			{
 				"cell_type": "code",
@@ -110,7 +110,7 @@
 					"\n",
 					"dim_Silver=dim_silver.filter(F.col(\"dealer_id\").isNotNull())"
 				],
-				"execution_count": 18
+				"execution_count": 36
 			},
 			{
 				"cell_type": "code",
@@ -131,7 +131,7 @@
 					"\n",
 					""
 				],
-				"execution_count": 19
+				"execution_count": 37
 			},
 			{
 				"cell_type": "code",
@@ -143,7 +143,7 @@
 					"    .withColumn(\"migration_status\", F.initcap(\"migration_status\"))\n",
 					")"
 				],
-				"execution_count": 20
+				"execution_count": 38
 			},
 			{
 				"cell_type": "code",
@@ -156,7 +156,7 @@
 					"    )\n",
 					")"
 				],
-				"execution_count": 21
+				"execution_count": 39
 			},
 			{
 				"cell_type": "code",
@@ -170,7 +170,7 @@
 					")\n",
 					""
 				],
-				"execution_count": 22
+				"execution_count": 40
 			},
 			{
 				"cell_type": "code",
@@ -182,7 +182,7 @@
 					"print(\"silver count:\",dim_Silver.count())\n",
 					"display(dim_Silver)"
 				],
-				"execution_count": 23
+				"execution_count": 41
 			},
 			{
 				"cell_type": "code",
@@ -191,7 +191,117 @@
 					"dim_silver.write.mode(\"overwrite\")\\\n",
 					".parquet(silver+\"/dim_dealer\")"
 				],
-				"execution_count": 25
+				"execution_count": 42
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"dim_gold = (\n",
+					"    dim_silver\n",
+					"    .withColumn(\"start_date\",F.current_date())\n",
+					"    .withColumn(\"end_date\",F.lit(\"9999-12-31\"))\n",
+					"    .withColumn(\"is_current\",F.lit(1))\n",
+					")\n",
+					"\n",
+					"dim_gold.write \\\n",
+					".format(\"delta\") \\\n",
+					".mode(\"overwrite\") \\\n",
+					".save(\n",
+					"gold + \"/DimDealer\"\n",
+					")"
+				],
+				"execution_count": 43
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"collapsed": false
+				},
+				"source": [
+					"from pyspark.sql import functions as F\n",
+					"\n",
+					"dim_silver = (\n",
+					"    dim_raw\n",
+					"    .dropDuplicates([\"dealer_id\"])\n",
+					"    .filter(F.col(\"dealer_id\").isNotNull())\n",
+					")\n",
+					"\n",
+					"dim_silver = dim_silver.withColumn(\n",
+					"    \"updated_at\",\n",
+					"    F.to_timestamp(\n",
+					"        F.col(\"updated_at\"),\n",
+					"        \"M/d/yyyy H:mm\"\n",
+					"    )\n",
+					")\n",
+					"\n",
+					"display(dim_silver)\n",
+					""
+				],
+				"execution_count": 44
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"collapsed": false
+				},
+				"source": [
+					"gold_dim = spark.read.format(\"delta\").load(\n",
+					"    gold + \"/DimDealer\"\n",
+					")\n",
+					"\n",
+					"display(gold_dim)"
+				],
+				"execution_count": 45
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"\"\"\"gold fact tale\"\"\"\n",
+					"\n",
+					"fact_gold = fact_silver.select(\n",
+					"\"demand_id\",\n",
+					"\"dealer_id\",\n",
+					"\"material_id\",\n",
+					"\"demand_month\",\n",
+					"\"demand_type\",\n",
+					"\"demand_qty\",\n",
+					"\"allocated_qty\",\n",
+					"\"shipped_qty\",\n",
+					"\"pipeline_type\",\n",
+					"\"migration_batch_id\"\n",
+					")"
+				],
+				"execution_count": 46
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"fact_gold.write \\\n",
+					".format(\"delta\") \\\n",
+					".mode(\"overwrite\") \\\n",
+					".save(\n",
+					"gold + \"/FactMobilityDemand\"\n",
+					")"
+				],
+				"execution_count": 47
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"fact_gold = fact_silver.select(\n",
+					"\"demand_id\",\n",
+					"\"dealer_id\",\n",
+					"\"material_id\",\n",
+					"\"demand_month\",\n",
+					"\"demand_type\",\n",
+					"\"demand_qty\",\n",
+					"\"allocated_qty\",\n",
+					"\"shipped_qty\",\n",
+					"\"pipeline_type\",\n",
+					"\"migration_batch_id\"\n",
+					")"
+				],
+				"execution_count": 48
 			}
 		]
 	}

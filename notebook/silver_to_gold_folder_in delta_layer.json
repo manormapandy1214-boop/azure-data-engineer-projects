@@ -17,7 +17,7 @@
 				"spark.dynamicAllocation.enabled": "false",
 				"spark.dynamicAllocation.minExecutors": "2",
 				"spark.dynamicAllocation.maxExecutors": "2",
-				"spark.autotune.trackingId": "638b1557-b6d7-4a44-8207-b98e6e877523"
+				"spark.autotune.trackingId": "ece3aeea-63a1-4467-99aa-b6825b8405a2"
 			}
 		},
 		"metadata": {
@@ -51,7 +51,19 @@
 			{
 				"cell_type": "code",
 				"source": [
-					""
+					"dim_gold = (\n",
+					"    dim_silver\n",
+					"    .withColumn(\"start_date\",F.current_date())\n",
+					"    .withColumn(\"end_date\",F.lit(\"9999-12-31\"))\n",
+					"    .withColumn(\"is_current\",F.lit(1))\n",
+					")\n",
+					"\n",
+					"dim_gold.write \\\n",
+					".format(\"delta\") \\\n",
+					".mode(\"overwrite\") \\\n",
+					".save(\n",
+					"gold + \"/DimDealer\"\n",
+					")"
 				],
 				"execution_count": null
 			}
