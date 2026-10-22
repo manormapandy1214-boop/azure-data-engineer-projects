@@ -1,0 +1,65 @@
+{
+	"name": "fact_tables",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "azure-snyapse-WorkspaceDefaultStorage",
+			"type": "LinkedServiceReference"
+		},
+		"annotations": [],
+		"type": "DelimitedText",
+		"typeProperties": {
+			"location": {
+				"type": "AzureBlobFSLocation",
+				"fileName": "Fact_Mobility_Demand.csv",
+				"folderPath": "input",
+				"fileSystem": "synapse-filename"
+			},
+			"columnDelimiter": ",",
+			"escapeChar": "\\",
+			"firstRowAsHeader": true,
+			"quoteChar": "\""
+		},
+		"schema": [
+			{
+				"name": "demand_id",
+				"type": "String"
+			},
+			{
+				"name": "dealer_id",
+				"type": "String"
+			},
+			{
+				"name": "material_id",
+				"type": "String"
+			},
+			{
+				"name": "demand_month",
+				"type": "String"
+			},
+			{
+				"name": "demand_type",
+				"type": "String"
+			},
+			{
+				"name": "demand_qty",
+				"type": "String"
+			},
+			{
+				"name": "allocated_qty",
+				"type": "String"
+			},
+			{
+				"name": "shipped_qty",
+				"type": "String"
+			},
+			{
+				"name": "pipeline_type",
+				"type": "String"
+			},
+			{
+				"name": "migration_batch_id",
+				"type": "String"
+			}
+		]
+	}
+}

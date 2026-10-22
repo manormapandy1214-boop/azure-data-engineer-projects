@@ -1,0 +1,57 @@
+{
+	"name": "fact_parquet_table",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "azure-snyapse-WorkspaceDefaultStorage",
+			"type": "LinkedServiceReference"
+		},
+		"annotations": [],
+		"type": "Parquet",
+		"typeProperties": {
+			"location": {
+				"type": "AzureBlobFSLocation",
+				"folderPath": "Bronze",
+				"fileSystem": "synapse-filename"
+			},
+			"compressionCodec": "snappy"
+		},
+		"schema": [
+			{
+				"name": "dealer_id",
+				"type": "UTF8"
+			},
+			{
+				"name": "dealer_name",
+				"type": "UTF8"
+			},
+			{
+				"name": "city",
+				"type": "UTF8"
+			},
+			{
+				"name": "state",
+				"type": "UTF8"
+			},
+			{
+				"name": "pipeline_type",
+				"type": "UTF8"
+			},
+			{
+				"name": "source_system",
+				"type": "UTF8"
+			},
+			{
+				"name": "target_system",
+				"type": "UTF8"
+			},
+			{
+				"name": "migration_status",
+				"type": "UTF8"
+			},
+			{
+				"name": "updated_at",
+				"type": "UTF8"
+			}
+		]
+	}
+}
