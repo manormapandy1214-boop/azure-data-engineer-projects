@@ -1,0 +1,198 @@
+{
+	"name": "copy_data_from_bronze_to_silver",
+	"properties": {
+		"nbformat": 4,
+		"nbformat_minor": 2,
+		"bigDataPool": {
+			"referenceName": "sparkpool",
+			"type": "BigDataPoolReference"
+		},
+		"sessionProperties": {
+			"driverMemory": "28g",
+			"driverCores": 4,
+			"executorMemory": "28g",
+			"executorCores": 4,
+			"numExecutors": 2,
+			"conf": {
+				"spark.dynamicAllocation.enabled": "false",
+				"spark.dynamicAllocation.minExecutors": "2",
+				"spark.dynamicAllocation.maxExecutors": "2",
+				"spark.autotune.trackingId": "19861b01-d23a-4753-b292-48735ab3aa6d"
+			}
+		},
+		"metadata": {
+			"saveOutput": true,
+			"enableDebugMode": false,
+			"kernelspec": {
+				"name": "synapse_pyspark",
+				"display_name": "Synapse PySpark"
+			},
+			"language_info": {
+				"name": "python"
+			},
+			"a365ComputeOptions": {
+				"id": "/subscriptions/a18b1a9d-1b3c-449a-b890-10e1ea988a8b/resourceGroups/adf_resouce_group/providers/Microsoft.Synapse/workspaces/azure-snyapse/bigDataPools/sparkpool",
+				"name": "sparkpool",
+				"type": "Spark",
+				"endpoint": "https://azure-snyapse.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/sparkpool",
+				"auth": {
+					"type": "AAD",
+					"authResource": "https://dev.azuresynapse.net"
+				},
+				"sparkVersion": "3.5",
+				"nodeCount": 10,
+				"cores": 4,
+				"memory": 28,
+				"automaticScaleJobs": false
+			},
+			"sessionKeepAliveTimeout": 30
+		},
+		"cells": [
+			{
+				"cell_type": "code",
+				"metadata": {
+					"collapsed": false
+				},
+				"source": [
+					"from pyspark.sql import functions as F\n",
+					"from pyspark.sql.window import Window\n",
+					"from delta.tables import DeltaTable\n",
+					"\n",
+					"\n",
+					"storage_account = \"synapase\"\n",
+					"\n",
+					"container = \"synapse-filename\"\n",
+					"\n",
+					"bronze = (\n",
+					"    f\"abfss://synapse-filename@synapase.dfs.core.windows.net/Bronze\"\n",
+					")\n",
+					"\n",
+					"silver = (\n",
+					"    f\"abfss://synapse-filename@synapase.dfs.core.windows.net/Silver\"\n",
+					")\n",
+					"\n",
+					"gold = (\n",
+					"    f\"abfss://synapse-filename@synapase.dfs.core.windows.net/Gold\"\n",
+					")\n",
+					"\n",
+					"# Read Dimension Parquet file\n",
+					"dim_raw = spark.read.parquet(\n",
+					"    bronze + \"/Dim_Dealer.parquet\"\n",
+					")\n",
+					"\n",
+					"# Read Fact Parquet file\n",
+					"fact_raw = spark.read.parquet(\n",
+					"    bronze + \"/Fact_Mobility_Demand.parquet\"\n",
+					")\n",
+					"\n",
+					"print(\"Dimension records:\", dim_raw.count())\n",
+					"print(\"Fact records:\", fact_raw.count())\n",
+					"\n",
+					"display(dim_raw)\n",
+					"display(fact_raw)"
+				],
+				"execution_count": 13
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"\"\"\"cleaning data in silver layer\"\"\"\n",
+					"dim_raw.printSchema()\n",
+					"fact_raw.printSchema()"
+				],
+				"execution_count": 15
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"\"\"\"Remove duplicates\"\"\"\n",
+					"dim_silver=dim_raw.drop_duplicates([\"dealer_id\"])\n",
+					"\n",
+					"dim_Silver=dim_silver.filter(F.col(\"dealer_id\").isNotNull())"
+				],
+				"execution_count": 18
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"\"\"\"trim space\"\"\"\n",
+					"string_cols=[\n",
+					"    \"dealer_id\",\n",
+					"    \"dealer_name\",\n",
+					"    \"city\",\n",
+					"    \"pipeline_type\",\n",
+					"    \"source_system\",\n",
+					"    \"target_system\",\n",
+					"    \"migration_status\"\n",
+					"]\n",
+					"\n",
+					"for c in string_cols:\n",
+					"    dim_Silver=dim_silver.withColumn(c,F.trim(F.col(c)))\n",
+					"\n",
+					""
+				],
+				"execution_count": 19
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"\"\"\"Standardize Text\"\"\"\n",
+					"dim_silver=(dim_silver\n",
+					"   .withColumn(\"city\",F.initcap(\"city\"))\n",
+					"   .withColumn(\"state\", F.initcap(\"state\"))\n",
+					"    .withColumn(\"migration_status\", F.initcap(\"migration_status\"))\n",
+					")"
+				],
+				"execution_count": 20
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"dim_silver = dim_silver.withColumn(\n",
+					"    \"updated_at\",\n",
+					"    F.to_timestamp(\n",
+					"        \"updated_at\",\n",
+					"        \"M/d/yyyy H:mm\"\n",
+					"    )\n",
+					")"
+				],
+				"execution_count": 21
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"\"\"\"6. Add Audit Columns\"\"\"\n",
+					"\n",
+					"dim_silver = (\n",
+					"    dim_silver\n",
+					"    .withColumn(\"load_date\", F.current_timestamp())\n",
+					"    .withColumn(\"source_layer\", F.lit(\"Silver\"))\n",
+					")\n",
+					""
+				],
+				"execution_count": 22
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"collapsed": false
+				},
+				"source": [
+					"\"\"\"validate\"\"\"\n",
+					"print(\"silver count:\",dim_Silver.count())\n",
+					"display(dim_Silver)"
+				],
+				"execution_count": 23
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"\"\"\"write data in silver layer\"\"\"\n",
+					"dim_silver.write.mode(\"overwrite\")\\\n",
+					".parquet(silver+\"/dim_dealer\")"
+				],
+				"execution_count": 25
+			}
+		]
+	}
+}
