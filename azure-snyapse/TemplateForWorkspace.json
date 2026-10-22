@@ -34,15 +34,6 @@
 	},
 	"resources": [
 		{
-			"name": "[concat(parameters('workspaceName'), '/sparkpool')]",
-			"type": "Microsoft.Synapse/workspaces/bigDataPools",
-			"apiVersion": "2019-06-01-preview",
-			"properties": {
-				"annotations": []
-			},
-			"dependsOn": []
-		},
-		{
 			"name": "[concat(parameters('workspaceName'), '/copy_api_to_bronze_layer')]",
 			"type": "Microsoft.Synapse/workspaces/pipelines",
 			"apiVersion": "2019-06-01-preview",
@@ -96,6 +87,71 @@
 								"parameters": {}
 							}
 						]
+					},
+					{
+						"name": "copy_api_data_to_bronze_layer_copy1",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "copy_api_data_to_bronze_layer",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "DelimitedTextSource",
+								"storeSettings": {
+									"type": "AzureBlobFSReadSettings",
+									"recursive": true,
+									"enablePartitionDiscovery": false
+								},
+								"formatSettings": {
+									"type": "DelimitedTextReadSettings"
+								}
+							},
+							"sink": {
+								"type": "ParquetSink",
+								"storeSettings": {
+									"type": "AzureBlobFSWriteSettings"
+								},
+								"formatSettings": {
+									"type": "ParquetWriteSettings"
+								}
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "fact_tables",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "fact_parquet_table",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						]
 					}
 				],
 				"policy": {
@@ -106,7 +162,194 @@
 			},
 			"dependsOn": [
 				"[concat(variables('workspaceId'), '/datasets/Json1')]",
-				"[concat(variables('workspaceId'), '/datasets/Parquet_bronzelayer')]"
+				"[concat(variables('workspaceId'), '/datasets/Parquet_bronzelayer')]",
+				"[concat(variables('workspaceId'), '/datasets/fact_tables')]",
+				"[concat(variables('workspaceId'), '/datasets/fact_parquet_table')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/copy_data_Activity_Adlsgen2')]",
+			"type": "Microsoft.Synapse/workspaces/pipelines",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"activities": [
+					{
+						"name": "copy_datato bronze_layer",
+						"type": "Copy",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "DelimitedTextSource",
+								"storeSettings": {
+									"type": "AzureBlobFSReadSettings",
+									"recursive": true,
+									"enablePartitionDiscovery": false
+								},
+								"formatSettings": {
+									"type": "DelimitedTextReadSettings"
+								}
+							},
+							"sink": {
+								"type": "ParquetSink",
+								"storeSettings": {
+									"type": "AzureBlobFSWriteSettings"
+								},
+								"formatSettings": {
+									"type": "ParquetWriteSettings"
+								}
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"mappings": [
+									{
+										"source": {
+											"name": "dealer_id",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "dealer_id",
+											"type": "String",
+											"physicalType": "UTF8"
+										}
+									},
+									{
+										"source": {
+											"name": "dealer_name",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "dealer_name",
+											"type": "String",
+											"physicalType": "UTF8"
+										}
+									},
+									{
+										"source": {
+											"name": "city",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "city",
+											"type": "String",
+											"physicalType": "UTF8"
+										}
+									},
+									{
+										"source": {
+											"name": "state",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "state",
+											"type": "String",
+											"physicalType": "UTF8"
+										}
+									},
+									{
+										"source": {
+											"name": "pipeline_type",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "pipeline_type",
+											"type": "String",
+											"physicalType": "UTF8"
+										}
+									},
+									{
+										"source": {
+											"name": "source_system",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "source_system",
+											"type": "String",
+											"physicalType": "UTF8"
+										}
+									},
+									{
+										"source": {
+											"name": "target_system",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "target_system",
+											"type": "String",
+											"physicalType": "UTF8"
+										}
+									},
+									{
+										"source": {
+											"name": "migration_status",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "migration_status",
+											"type": "String",
+											"physicalType": "UTF8"
+										}
+									},
+									{
+										"source": {
+											"name": "updated_at",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "updated_at",
+											"type": "String",
+											"physicalType": "UTF8"
+										}
+									}
+								],
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "ds_file1",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "Parquetbronze_copydata",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						]
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"annotations": []
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/datasets/ds_file1')]",
+				"[concat(variables('workspaceId'), '/datasets/Parquetbronze_copydata')]"
 			]
 		},
 		{
@@ -155,6 +398,270 @@
 			},
 			"dependsOn": [
 				"[concat(variables('workspaceId'), '/linkedServices/AzureDataLakeStorage1')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/Parquetbronze_copydata')]",
+			"type": "Microsoft.Synapse/workspaces/datasets",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "azure-snyapse-WorkspaceDefaultStorage",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "Parquet",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": "Bronze",
+						"fileSystem": "synapse-filename"
+					},
+					"compressionCodec": "snappy"
+				},
+				"schema": [
+					{
+						"name": "event_id",
+						"type": "UTF8"
+					},
+					{
+						"name": "event_type",
+						"type": "UTF8"
+					},
+					{
+						"name": "customer_id",
+						"type": "UTF8"
+					},
+					{
+						"name": "event_timestamp",
+						"type": "UTF8"
+					},
+					{
+						"name": "payment_method",
+						"type": "UTF8"
+					},
+					{
+						"name": "product_id",
+						"type": "UTF8"
+					},
+					{
+						"name": "product_category",
+						"type": "UTF8"
+					},
+					{
+						"name": "amount",
+						"type": "DOUBLE"
+					},
+					{
+						"name": "location",
+						"type": "UTF8"
+					},
+					{
+						"name": "status",
+						"type": "UTF8"
+					}
+				]
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/linkedServices/azure-snyapse-WorkspaceDefaultStorage')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/ds_file1')]",
+			"type": "Microsoft.Synapse/workspaces/datasets",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "azure-snyapse-WorkspaceDefaultStorage",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "DelimitedText",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": "Dim_Dealer.csv",
+						"folderPath": "input",
+						"fileSystem": "synapse-filename"
+					},
+					"columnDelimiter": ",",
+					"escapeChar": "\\",
+					"firstRowAsHeader": true,
+					"quoteChar": "\""
+				},
+				"schema": [
+					{
+						"name": "dealer_id",
+						"type": "String"
+					},
+					{
+						"name": "dealer_name",
+						"type": "String"
+					},
+					{
+						"name": "city",
+						"type": "String"
+					},
+					{
+						"name": "state",
+						"type": "String"
+					},
+					{
+						"name": "pipeline_type",
+						"type": "String"
+					},
+					{
+						"name": "source_system",
+						"type": "String"
+					},
+					{
+						"name": "target_system",
+						"type": "String"
+					},
+					{
+						"name": "migration_status",
+						"type": "String"
+					},
+					{
+						"name": "updated_at",
+						"type": "String"
+					}
+				]
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/linkedServices/azure-snyapse-WorkspaceDefaultStorage')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/fact_parquet_table')]",
+			"type": "Microsoft.Synapse/workspaces/datasets",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "azure-snyapse-WorkspaceDefaultStorage",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "Parquet",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": "Bronze",
+						"fileSystem": "synapse-filename"
+					},
+					"compressionCodec": "snappy"
+				},
+				"schema": [
+					{
+						"name": "dealer_id",
+						"type": "UTF8"
+					},
+					{
+						"name": "dealer_name",
+						"type": "UTF8"
+					},
+					{
+						"name": "city",
+						"type": "UTF8"
+					},
+					{
+						"name": "state",
+						"type": "UTF8"
+					},
+					{
+						"name": "pipeline_type",
+						"type": "UTF8"
+					},
+					{
+						"name": "source_system",
+						"type": "UTF8"
+					},
+					{
+						"name": "target_system",
+						"type": "UTF8"
+					},
+					{
+						"name": "migration_status",
+						"type": "UTF8"
+					},
+					{
+						"name": "updated_at",
+						"type": "UTF8"
+					}
+				]
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/linkedServices/azure-snyapse-WorkspaceDefaultStorage')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/fact_tables')]",
+			"type": "Microsoft.Synapse/workspaces/datasets",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "azure-snyapse-WorkspaceDefaultStorage",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "DelimitedText",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": "Fact_Mobility_Demand.csv",
+						"folderPath": "input",
+						"fileSystem": "synapse-filename"
+					},
+					"columnDelimiter": ",",
+					"escapeChar": "\\",
+					"firstRowAsHeader": true,
+					"quoteChar": "\""
+				},
+				"schema": [
+					{
+						"name": "demand_id",
+						"type": "String"
+					},
+					{
+						"name": "dealer_id",
+						"type": "String"
+					},
+					{
+						"name": "material_id",
+						"type": "String"
+					},
+					{
+						"name": "demand_month",
+						"type": "String"
+					},
+					{
+						"name": "demand_type",
+						"type": "String"
+					},
+					{
+						"name": "demand_qty",
+						"type": "String"
+					},
+					{
+						"name": "allocated_qty",
+						"type": "String"
+					},
+					{
+						"name": "shipped_qty",
+						"type": "String"
+					},
+					{
+						"name": "pipeline_type",
+						"type": "String"
+					},
+					{
+						"name": "migration_batch_id",
+						"type": "String"
+					}
+				]
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/linkedServices/azure-snyapse-WorkspaceDefaultStorage')]"
 			]
 		},
 		{
@@ -374,7 +881,7 @@
 						"spark.dynamicAllocation.enabled": "false",
 						"spark.dynamicAllocation.minExecutors": "2",
 						"spark.dynamicAllocation.maxExecutors": "2",
-						"spark.autotune.trackingId": "e3fdc835-e239-487e-8678-efa4e5c0a812"
+						"spark.autotune.trackingId": "6451e9a4-569f-421e-9711-c25f99e1e7ed"
 					}
 				},
 				"metadata": {
@@ -399,8 +906,7 @@
 						"sparkVersion": "3.5",
 						"nodeCount": 10,
 						"cores": 4,
-						"memory": 28,
-						"automaticScaleJobs": false
+						"memory": 28
 					},
 					"sessionKeepAliveTimeout": 30
 				},
@@ -551,7 +1057,7 @@
 			"properties": {
 				"autoPause": {
 					"enabled": true,
-					"delayInMinutes": 10
+					"delayInMinutes": 5
 				},
 				"autoScale": {
 					"enabled": true,
