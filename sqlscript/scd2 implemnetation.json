@@ -1,0 +1,17 @@
+{
+	"name": "scd2 implemnetation",
+	"properties": {
+		"content": {
+			"query": "TRUNCATE TABLE dbo.DimCustomer;\nTRUNCATE TABLE dbo.Customer_Source;\n\nINSERT INTO dbo.Customer_Source VALUES (1, 'Amit',   'Pune',      '9876543210');\nINSERT INTO dbo.Customer_Source VALUES (2, 'Neha',   'Mumbai',    '9123456780');\nINSERT INTO dbo.Customer_Source VALUES (3, 'Rahul',  'Delhi',     '9988776655');\nINSERT INTO dbo.Customer_Source VALUES (4, 'Priya',  'Bangalore', '9090909090');\nINSERT INTO dbo.Customer_Source VALUES (5, 'Sanjay', 'Nagpur',    '9812345678');\n\n\n-- A. Changed rows ko expire karo\nUPDATE dbo.DimCustomer\nSET    EndDate   = CAST(GETDATE() AS DATE),\n       IsCurrent = 0\nWHERE  IsCurrent = 1\n  AND EXISTS\n  (\n      SELECT 1\n      FROM   dbo.Customer_Source s\n      WHERE  s.CustomerID = dbo.DimCustomer.CustomerID\n        AND (   ISNULL(s.CustomerName,'') <> ISNULL(dbo.DimCustomer.CustomerName,'')\n             OR ISNULL(s.City,'')         <> ISNULL(dbo.DimCustomer.City,'')\n             OR ISNULL(s.MobileNumber,'') <> ISNULL(dbo.DimCustomer.MobileNumber,'') )\n  );\n\n\n\n\n\n  -- B. Naye aur changed customers ka current row insert karo\nINSERT INTO dbo.DimCustomer\n       (CustomerID, CustomerName, City, MobileNumber, StartDate, EndDate, IsCurrent)\nSELECT s.CustomerID, s.CustomerName, s.City, s.MobileNumber,\n       CAST(GETDATE() AS DATE), NULL, 1\nFROM   dbo.Customer_Source s\nWHERE  NOT EXISTS\n(\n    SELECT 1\n    FROM   dbo.DimCustomer d\n    WHERE  d.CustomerID = s.CustomerID\n      AND  d.IsCurrent  = 1\n);\n\n\nSELECT * FROM dbo.DimCustomer ORDER BY CustomerID, StartDate;\n\n\nUPDATE dbo.Customer_Source SET City = 'Hyderabad' WHERE CustomerID = 1;\nUPDATE dbo.Customer_Source SET MobileNumber = '9000000001' WHERE CustomerID = 2;\nINSERT INTO dbo.Customer_Source VALUES (6, 'Kiran', 'Chennai', '9345678901');",
+			"metadata": {
+				"language": "sql"
+			},
+			"currentConnection": {
+				"databaseName": "sql_pool",
+				"poolName": "sql_pool"
+			},
+			"resultLimit": 5000
+		},
+		"type": "SqlQuery"
+	}
+}
