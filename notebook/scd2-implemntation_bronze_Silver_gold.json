@@ -17,7 +17,7 @@
 				"spark.dynamicAllocation.enabled": "false",
 				"spark.dynamicAllocation.minExecutors": "2",
 				"spark.dynamicAllocation.maxExecutors": "2",
-				"spark.autotune.trackingId": "1679c39d-6b67-4645-a6f5-2cf7dfa53432"
+				"spark.autotune.trackingId": "1a12c209-d564-4955-af34-0d9fc7776c7e"
 			}
 		},
 		"metadata": {
@@ -99,7 +99,199 @@
 					".mode(\"overwrite\") \\\n",
 					".save(silver_path)"
 				],
-				"execution_count": 5
+				"execution_count": 9
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"from pyspark.sql import functions as F\n",
+					"from delta.tables import DeltaTable\n",
+					"\n",
+					"silver_path = \"abfss://synapse-filename@synapase.dfs.core.windows.net/silver/customer\"\n",
+					"gold_path = \"abfss://synapse-filename@synapase.dfs.core.windows.net/gold/customer_scd2\"\n",
+					"\n",
+					"silver_df = spark.read.format(\"delta\").load(silver_path)\n",
+					"\n",
+					"silver_df.show(truncate=False)"
+				],
+				"execution_count": 12
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"\"\"\"implement scd2 first timein silver layer\"\"\"\n",
+					"gold_df = (\n",
+					"    silver_df\n",
+					"    .withColumn(\"start_date\", F.to_date(\"updated_at\"))\n",
+					"    .withColumn(\"end_date\", F.lit(None).cast(\"date\"))\n",
+					"    .withColumn(\"is_current\", F.lit(True))\n",
+					")\n",
+					"\n",
+					"gold_df.write \\\n",
+					"    .format(\"delta\") \\\n",
+					"    .mode(\"overwrite\") \\\n",
+					"    .save(gold_path)"
+				],
+				"execution_count": 15
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"gold_table = DeltaTable.forPath(spark, gold_path)\n",
+					"\n",
+					"gold_table.alias(\"tgt\").merge(\n",
+					"    silver_df.alias(\"src\"),\n",
+					"    \"tgt.customer_id = src.customer_id AND tgt.is_current = true\"\n",
+					").whenMatchedUpdate(\n",
+					"    condition=\"\"\"\n",
+					"        NOT (tgt.customer_name <=> src.customer_name)\n",
+					"        OR NOT (tgt.city <=> src.city)\n",
+					"        OR NOT (tgt.state <=> src.state)\n",
+					"    \"\"\",\n",
+					"    set={\n",
+					"        \"end_date\": \"current_date()\",\n",
+					"        \"is_current\": \"false\"\n",
+					"    }\n",
+					").execute()"
+				],
+				"execution_count": 16
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"gold_table = DeltaTable.forPath(spark, gold_path)\n",
+					"\n",
+					"gold_table.alias(\"tgt\").merge(\n",
+					"    silver_df.alias(\"src\"),\n",
+					"    \"tgt.customer_id = src.customer_id AND tgt.is_current = true\"\n",
+					").whenNotMatchedInsert(\n",
+					"    values={\n",
+					"        \"customer_id\": \"src.customer_id\",\n",
+					"        \"customer_name\": \"src.customer_name\",\n",
+					"        \"city\": \"src.city\",\n",
+					"        \"state\": \"src.state\",\n",
+					"        \"created_at\": \"src.created_at\",\n",
+					"        \"updated_at\": \"src.updated_at\",\n",
+					"        \"start_date\": \"current_date()\",\n",
+					"        \"end_date\": \"CAST(NULL AS DATE)\",\n",
+					"        \"is_current\": \"true\"\n",
+					"    }\n",
+					").execute()"
+				],
+				"execution_count": 17
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"final_gold_df = spark.read.format(\"delta\").load(gold_path)\n",
+					"\n",
+					"final_gold_df.orderBy(\n",
+					"    \"customer_id\", \"start_date\"\n",
+					").show(truncate=False)"
+				],
+				"execution_count": 18
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"from pyspark.sql import functions as F\n",
+					"\n",
+					"silver_df = spark.read.format(\"delta\").load(silver_path)\n",
+					"\n",
+					"test_df = silver_df.withColumn(\n",
+					"    \"city\",\n",
+					"    F.when(\n",
+					"        F.col(\"customer_id\") == \"C001\",\n",
+					"        F.lit(\"Pune\")\n",
+					"    ).otherwise(F.col(\"city\"))\n",
+					").withColumn(\n",
+					"    \"updated_at\",\n",
+					"    F.when(\n",
+					"        F.col(\"customer_id\") == \"C001\",\n",
+					"        F.lit(\"2026-10-28T10:00:00\")\n",
+					"    ).otherwise(F.col(\"updated_at\"))\n",
+					")\n",
+					"\n",
+					"test_df.write \\\n",
+					"    .format(\"delta\") \\\n",
+					"    .mode(\"overwrite\") \\\n",
+					"    .save(silver_path)"
+				],
+				"execution_count": 19
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"from delta.tables import DeltaTable\n",
+					"\n",
+					"gold_table = DeltaTable.forPath(spark, gold_path)\n",
+					"\n",
+					"silver_df = spark.read.format(\"delta\").load(silver_path)\n",
+					"\n",
+					"gold_table.alias(\"tgt\").merge(\n",
+					"    silver_df.alias(\"src\"),\n",
+					"    \"tgt.customer_id = src.customer_id AND tgt.is_current = true\"\n",
+					").whenMatchedUpdate(\n",
+					"    condition=\"\"\"\n",
+					"        NOT (tgt.customer_name <=> src.customer_name)\n",
+					"        OR NOT (tgt.city <=> src.city)\n",
+					"        OR NOT (tgt.state <=> src.state)\n",
+					"    \"\"\",\n",
+					"    set={\n",
+					"        \"end_date\": \"current_date()\",\n",
+					"        \"is_current\": \"false\"\n",
+					"    }\n",
+					").execute()"
+				],
+				"execution_count": 20
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"gold_table = DeltaTable.forPath(spark, gold_path)\n",
+					"\n",
+					"gold_table.alias(\"tgt\").merge(\n",
+					"    silver_df.alias(\"src\"),\n",
+					"    \"tgt.customer_id = src.customer_id AND tgt.is_current = true\"\n",
+					").whenNotMatchedInsert(\n",
+					"    values={\n",
+					"        \"customer_id\": \"src.customer_id\",\n",
+					"        \"customer_name\": \"src.customer_name\",\n",
+					"        \"city\": \"src.city\",\n",
+					"        \"state\": \"src.state\",\n",
+					"        \"created_at\": \"src.created_at\",\n",
+					"        \"updated_at\": \"src.updated_at\",\n",
+					"        \"start_date\": \"current_date()\",\n",
+					"        \"end_date\": \"CAST(NULL AS DATE)\",\n",
+					"        \"is_current\": \"true\"\n",
+					"    }\n",
+					").execute()"
+				],
+				"execution_count": 21
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"from pyspark.sql import functions as F\n",
+					"\n",
+					"gold_path = \"abfss://synapse-filename@synapase.dfs.core.windows.net/gold/customer_scd2\"\n",
+					"\n",
+					"final_gold_df = spark.read.format(\"delta\").load(gold_path)\n",
+					"\n",
+					"final_gold_df.orderBy(\n",
+					"    \"customer_id\", \"start_date\"\n",
+					").show(truncate=False)"
+				],
+				"execution_count": 22
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"final_gold_df.filter(\n",
+					"    F.col(\"customer_id\") == \"C001\"\n",
+					").orderBy(\"start_date\").show(truncate=False)"
+				],
+				"execution_count": 23
 			}
 		]
 	}
