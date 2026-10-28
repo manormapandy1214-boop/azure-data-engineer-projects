@@ -880,6 +880,26 @@
 			"dependsOn": []
 		},
 		{
+			"name": "[concat(parameters('workspaceName'), '/scd2 implemnetation')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "TRUNCATE TABLE dbo.DimCustomer;\nTRUNCATE TABLE dbo.Customer_Source;\n\nINSERT INTO dbo.Customer_Source VALUES (1, 'Amit',   'Pune',      '9876543210');\nINSERT INTO dbo.Customer_Source VALUES (2, 'Neha',   'Mumbai',    '9123456780');\nINSERT INTO dbo.Customer_Source VALUES (3, 'Rahul',  'Delhi',     '9988776655');\nINSERT INTO dbo.Customer_Source VALUES (4, 'Priya',  'Bangalore', '9090909090');\nINSERT INTO dbo.Customer_Source VALUES (5, 'Sanjay', 'Nagpur',    '9812345678');\n\n\n-- A. Changed rows ko expire karo\nUPDATE dbo.DimCustomer\nSET    EndDate   = CAST(GETDATE() AS DATE),\n       IsCurrent = 0\nWHERE  IsCurrent = 1\n  AND EXISTS\n  (\n      SELECT 1\n      FROM   dbo.Customer_Source s\n      WHERE  s.CustomerID = dbo.DimCustomer.CustomerID\n        AND (   ISNULL(s.CustomerName,'') <> ISNULL(dbo.DimCustomer.CustomerName,'')\n             OR ISNULL(s.City,'')         <> ISNULL(dbo.DimCustomer.City,'')\n             OR ISNULL(s.MobileNumber,'') <> ISNULL(dbo.DimCustomer.MobileNumber,'') )\n  );\n\n\n\n\n\n  -- B. Naye aur changed customers ka current row insert karo\nINSERT INTO dbo.DimCustomer\n       (CustomerID, CustomerName, City, MobileNumber, StartDate, EndDate, IsCurrent)\nSELECT s.CustomerID, s.CustomerName, s.City, s.MobileNumber,\n       CAST(GETDATE() AS DATE), NULL, 1\nFROM   dbo.Customer_Source s\nWHERE  NOT EXISTS\n(\n    SELECT 1\n    FROM   dbo.DimCustomer d\n    WHERE  d.CustomerID = s.CustomerID\n      AND  d.IsCurrent  = 1\n);\n\n\nSELECT * FROM dbo.DimCustomer ORDER BY CustomerID, StartDate;\n\n\nUPDATE dbo.Customer_Source SET City = 'Hyderabad' WHERE CustomerID = 1;\nUPDATE dbo.Customer_Source SET MobileNumber = '9000000001' WHERE CustomerID = 2;\nINSERT INTO dbo.Customer_Source VALUES (6, 'Kiran', 'Chennai', '9345678901');",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"databaseName": "sql_pool",
+						"poolName": "sql_pool"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		},
+		{
 			"name": "[concat(parameters('workspaceName'), '/table with hash distribution')]",
 			"type": "Microsoft.Synapse/workspaces/sqlscripts",
 			"apiVersion": "2019-06-01-preview",
@@ -960,7 +980,7 @@
 						"spark.dynamicAllocation.enabled": "false",
 						"spark.dynamicAllocation.minExecutors": "2",
 						"spark.dynamicAllocation.maxExecutors": "2",
-						"spark.autotune.trackingId": "19861b01-d23a-4753-b292-48735ab3aa6d"
+						"spark.autotune.trackingId": "ffc52d6f-f920-4086-8b34-6c2c2a75d591"
 					}
 				},
 				"metadata": {
@@ -1034,7 +1054,7 @@
 							"display(fact_raw)"
 						],
 						"outputs": [],
-						"execution_count": 13
+						"execution_count": 34
 					},
 					{
 						"cell_type": "code",
@@ -1044,7 +1064,7 @@
 							"fact_raw.printSchema()"
 						],
 						"outputs": [],
-						"execution_count": 15
+						"execution_count": 35
 					},
 					{
 						"cell_type": "code",
@@ -1055,7 +1075,7 @@
 							"dim_Silver=dim_silver.filter(F.col(\"dealer_id\").isNotNull())"
 						],
 						"outputs": [],
-						"execution_count": 18
+						"execution_count": 36
 					},
 					{
 						"cell_type": "code",
@@ -1077,7 +1097,7 @@
 							""
 						],
 						"outputs": [],
-						"execution_count": 19
+						"execution_count": 37
 					},
 					{
 						"cell_type": "code",
@@ -1090,7 +1110,7 @@
 							")"
 						],
 						"outputs": [],
-						"execution_count": 20
+						"execution_count": 38
 					},
 					{
 						"cell_type": "code",
@@ -1104,7 +1124,7 @@
 							")"
 						],
 						"outputs": [],
-						"execution_count": 21
+						"execution_count": 39
 					},
 					{
 						"cell_type": "code",
@@ -1119,7 +1139,7 @@
 							""
 						],
 						"outputs": [],
-						"execution_count": 22
+						"execution_count": 40
 					},
 					{
 						"cell_type": "code",
@@ -1132,7 +1152,7 @@
 							"display(dim_Silver)"
 						],
 						"outputs": [],
-						"execution_count": 23
+						"execution_count": 41
 					},
 					{
 						"cell_type": "code",
@@ -1142,7 +1162,123 @@
 							".parquet(silver+\"/dim_dealer\")"
 						],
 						"outputs": [],
-						"execution_count": 25
+						"execution_count": 42
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"dim_gold = (\n",
+							"    dim_silver\n",
+							"    .withColumn(\"start_date\",F.current_date())\n",
+							"    .withColumn(\"end_date\",F.lit(\"9999-12-31\"))\n",
+							"    .withColumn(\"is_current\",F.lit(1))\n",
+							")\n",
+							"\n",
+							"dim_gold.write \\\n",
+							".format(\"delta\") \\\n",
+							".mode(\"overwrite\") \\\n",
+							".save(\n",
+							"gold + \"/DimDealer\"\n",
+							")"
+						],
+						"outputs": [],
+						"execution_count": 43
+					},
+					{
+						"cell_type": "code",
+						"metadata": {
+							"collapsed": false
+						},
+						"source": [
+							"from pyspark.sql import functions as F\n",
+							"\n",
+							"dim_silver = (\n",
+							"    dim_raw\n",
+							"    .dropDuplicates([\"dealer_id\"])\n",
+							"    .filter(F.col(\"dealer_id\").isNotNull())\n",
+							")\n",
+							"\n",
+							"dim_silver = dim_silver.withColumn(\n",
+							"    \"updated_at\",\n",
+							"    F.to_timestamp(\n",
+							"        F.col(\"updated_at\"),\n",
+							"        \"M/d/yyyy H:mm\"\n",
+							"    )\n",
+							")\n",
+							"\n",
+							"display(dim_silver)\n",
+							""
+						],
+						"outputs": [],
+						"execution_count": 44
+					},
+					{
+						"cell_type": "code",
+						"metadata": {
+							"collapsed": false
+						},
+						"source": [
+							"gold_dim = spark.read.format(\"delta\").load(\n",
+							"    gold + \"/DimDealer\"\n",
+							")\n",
+							"\n",
+							"display(gold_dim)"
+						],
+						"outputs": [],
+						"execution_count": 45
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"\"\"\"gold fact tale\"\"\"\n",
+							"\n",
+							"fact_gold = fact_silver.select(\n",
+							"\"demand_id\",\n",
+							"\"dealer_id\",\n",
+							"\"material_id\",\n",
+							"\"demand_month\",\n",
+							"\"demand_type\",\n",
+							"\"demand_qty\",\n",
+							"\"allocated_qty\",\n",
+							"\"shipped_qty\",\n",
+							"\"pipeline_type\",\n",
+							"\"migration_batch_id\"\n",
+							")"
+						],
+						"outputs": [],
+						"execution_count": 46
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"fact_gold.write \\\n",
+							".format(\"delta\") \\\n",
+							".mode(\"overwrite\") \\\n",
+							".save(\n",
+							"gold + \"/FactMobilityDemand\"\n",
+							")"
+						],
+						"outputs": [],
+						"execution_count": 47
+					},
+					{
+						"cell_type": "code",
+						"source": [
+							"fact_gold = fact_silver.select(\n",
+							"\"demand_id\",\n",
+							"\"dealer_id\",\n",
+							"\"material_id\",\n",
+							"\"demand_month\",\n",
+							"\"demand_type\",\n",
+							"\"demand_qty\",\n",
+							"\"allocated_qty\",\n",
+							"\"shipped_qty\",\n",
+							"\"pipeline_type\",\n",
+							"\"migration_batch_id\"\n",
+							")"
+						],
+						"outputs": [],
+						"execution_count": 48
 					}
 				]
 			},
@@ -1359,7 +1495,7 @@
 						"spark.dynamicAllocation.enabled": "false",
 						"spark.dynamicAllocation.minExecutors": "2",
 						"spark.dynamicAllocation.maxExecutors": "2",
-						"spark.autotune.trackingId": "0907fd5e-e214-40ea-a2fe-29c33b9ad7a6"
+						"spark.autotune.trackingId": "ece3aeea-63a1-4467-99aa-b6825b8405a2"
 					}
 				},
 				"metadata": {
@@ -1384,17 +1520,27 @@
 						"sparkVersion": "3.5",
 						"nodeCount": 10,
 						"cores": 4,
-						"memory": 28,
-						"automaticScaleJobs": false
+						"memory": 28
 					},
 					"sessionKeepAliveTimeout": 30
 				},
 				"cells": [
 					{
 						"cell_type": "code",
-						"metadata": {},
 						"source": [
-							""
+							"dim_gold = (\n",
+							"    dim_silver\n",
+							"    .withColumn(\"start_date\",F.current_date())\n",
+							"    .withColumn(\"end_date\",F.lit(\"9999-12-31\"))\n",
+							"    .withColumn(\"is_current\",F.lit(1))\n",
+							")\n",
+							"\n",
+							"dim_gold.write \\\n",
+							".format(\"delta\") \\\n",
+							".mode(\"overwrite\") \\\n",
+							".save(\n",
+							"gold + \"/DimDealer\"\n",
+							")"
 						],
 						"outputs": [],
 						"execution_count": null
@@ -1439,6 +1585,122 @@
 			},
 			"dependsOn": [],
 			"location": "centralindia"
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/scd2-implemntation_bronze_Silver_gold')]",
+			"type": "Microsoft.Synapse/workspaces/notebooks",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"nbformat": 4,
+				"nbformat_minor": 2,
+				"bigDataPool": {
+					"referenceName": "sparkpool",
+					"type": "BigDataPoolReference"
+				},
+				"sessionProperties": {
+					"driverMemory": "28g",
+					"driverCores": 4,
+					"executorMemory": "28g",
+					"executorCores": 4,
+					"numExecutors": 2,
+					"conf": {
+						"spark.dynamicAllocation.enabled": "false",
+						"spark.dynamicAllocation.minExecutors": "2",
+						"spark.dynamicAllocation.maxExecutors": "2",
+						"spark.autotune.trackingId": "f223a8f5-59e3-470d-a5f2-852b1591fb72"
+					}
+				},
+				"metadata": {
+					"saveOutput": true,
+					"enableDebugMode": false,
+					"kernelspec": {
+						"name": "synapse_pyspark",
+						"display_name": "Synapse PySpark"
+					},
+					"language_info": {
+						"name": "python"
+					},
+					"a365ComputeOptions": {
+						"id": "/subscriptions/a18b1a9d-1b3c-449a-b890-10e1ea988a8b/resourceGroups/adf_resouce_group/providers/Microsoft.Synapse/workspaces/azure-snyapse/bigDataPools/sparkpool",
+						"name": "sparkpool",
+						"type": "Spark",
+						"endpoint": "https://azure-snyapse.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/sparkpool",
+						"auth": {
+							"type": "AAD",
+							"authResource": "https://dev.azuresynapse.net"
+						},
+						"sparkVersion": "3.5",
+						"nodeCount": 10,
+						"cores": 4,
+						"memory": 28,
+						"extraHeader": {},
+						"automaticScaleJobs": false
+					},
+					"sessionKeepAliveTimeout": 30
+				},
+				"cells": [
+					{
+						"cell_type": "code",
+						"metadata": {
+							"collapsed": false
+						},
+						"source": [
+							"\"\"\"read data in adlsgen2 container\"\"\"\n",
+							"source_path = \"abfss://synapse-filename@synapase.dfs.core.windows.net/input/Customer.csv\"\n",
+							"\n",
+							"df = spark.read \\\n",
+							"    .option(\"header\", \"true\") \\\n",
+							"    .csv(source_path)\n",
+							"\n",
+							"display(df)"
+						],
+						"outputs": [],
+						"execution_count": 2
+					},
+					{
+						"cell_type": "code",
+						"metadata": {},
+						"source": [
+							"\"\"\"save data inbronze layer\"\"\"\n",
+							"bronze_path=\"abfss://synapse-filename@synapase.dfs.core.windows.net/bronze/customer\"\n",
+							"df.write \\\n",
+							".mode(\"overwrite\") \\\n",
+							".parquet(bronze_path)"
+						],
+						"outputs": [],
+						"execution_count": 3
+					},
+					{
+						"cell_type": "code",
+						"metadata": {
+							"collapsed": false
+						},
+						"source": [
+							"\"\"\"raed bronze layer\"\"\"\n",
+							"bronze_df=spark.read.parquet(bronze_path)\n",
+							"display(bronze_df)"
+						],
+						"outputs": [],
+						"execution_count": 4
+					},
+					{
+						"cell_type": "code",
+						"metadata": {},
+						"source": [
+							"\"\"\"save data in silver andcarete delta tabel\"\"\"\n",
+							"silver_df=bronze_df.drop_duplicates([\"customer_id\"])\n",
+							"silver_path=\"abfss://synapse-filename@synapase.dfs.core.windows.net/silver/customer\"\n",
+							"silver_df.write \\\n",
+							".format(\"Delta\")\\\n",
+							".mode(\"overwrite\") \\\n",
+							".save(silver_path)"
+						],
+						"outputs": [],
+						"execution_count": 5
+					}
+				]
+			},
+			"dependsOn": []
 		}
 	]
 }
