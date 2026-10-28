@@ -1475,6 +1475,333 @@
 			"dependsOn": []
 		},
 		{
+			"name": "[concat(parameters('workspaceName'), '/scd2-implemntation_bronze_Silver_gold')]",
+			"type": "Microsoft.Synapse/workspaces/notebooks",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"nbformat": 4,
+				"nbformat_minor": 2,
+				"bigDataPool": {
+					"referenceName": "sparkpool",
+					"type": "BigDataPoolReference"
+				},
+				"sessionProperties": {
+					"driverMemory": "28g",
+					"driverCores": 4,
+					"executorMemory": "28g",
+					"executorCores": 4,
+					"numExecutors": 2,
+					"conf": {
+						"spark.dynamicAllocation.enabled": "false",
+						"spark.dynamicAllocation.minExecutors": "2",
+						"spark.dynamicAllocation.maxExecutors": "2",
+						"spark.autotune.trackingId": "79ae3168-7d16-4441-8b3f-122e1e801121"
+					}
+				},
+				"metadata": {
+					"saveOutput": true,
+					"enableDebugMode": false,
+					"kernelspec": {
+						"name": "synapse_pyspark",
+						"display_name": "Synapse PySpark"
+					},
+					"language_info": {
+						"name": "python"
+					},
+					"a365ComputeOptions": {
+						"id": "/subscriptions/a18b1a9d-1b3c-449a-b890-10e1ea988a8b/resourceGroups/adf_resouce_group/providers/Microsoft.Synapse/workspaces/azure-snyapse/bigDataPools/sparkpool",
+						"name": "sparkpool",
+						"type": "Spark",
+						"endpoint": "https://azure-snyapse.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/sparkpool",
+						"auth": {
+							"type": "AAD",
+							"authResource": "https://dev.azuresynapse.net"
+						},
+						"sparkVersion": "3.5",
+						"nodeCount": 10,
+						"cores": 4,
+						"memory": 28,
+						"automaticScaleJobs": false
+					},
+					"sessionKeepAliveTimeout": 30
+				},
+				"cells": [
+					{
+						"cell_type": "code",
+						"metadata": {
+							"collapsed": false
+						},
+						"source": [
+							"\"\"\"read data in adlsgen2 container\"\"\"\n",
+							"source_path = \"abfss://synapse-filename@synapase.dfs.core.windows.net/input/Customer.csv\"\n",
+							"\n",
+							"df = spark.read \\\n",
+							"    .option(\"header\", \"true\") \\\n",
+							"    .csv(source_path)\n",
+							"\n",
+							"display(df)"
+						],
+						"outputs": [],
+						"execution_count": 2
+					},
+					{
+						"cell_type": "code",
+						"metadata": {},
+						"source": [
+							"\"\"\"save data inbronze layer\"\"\"\n",
+							"bronze_path=\"abfss://synapse-filename@synapase.dfs.core.windows.net/bronze/customer\"\n",
+							"df.write \\\n",
+							".mode(\"overwrite\") \\\n",
+							".parquet(bronze_path)"
+						],
+						"outputs": [],
+						"execution_count": 3
+					},
+					{
+						"cell_type": "code",
+						"metadata": {
+							"collapsed": false
+						},
+						"source": [
+							"\"\"\"raed bronze layer\"\"\"\n",
+							"bronze_df=spark.read.parquet(bronze_path)\n",
+							"display(bronze_df)"
+						],
+						"outputs": [],
+						"execution_count": 4
+					},
+					{
+						"cell_type": "code",
+						"metadata": {},
+						"source": [
+							"\"\"\"save data in silver andcarete delta tabel\"\"\"\n",
+							"silver_df=bronze_df.drop_duplicates([\"customer_id\"])\n",
+							"silver_path=\"abfss://synapse-filename@synapase.dfs.core.windows.net/silver/customer\"\n",
+							"silver_df.write \\\n",
+							".format(\"Delta\")\\\n",
+							".mode(\"overwrite\") \\\n",
+							".save(silver_path)"
+						],
+						"outputs": [],
+						"execution_count": 9
+					},
+					{
+						"cell_type": "code",
+						"metadata": {},
+						"source": [
+							"from pyspark.sql import functions as F\n",
+							"from delta.tables import DeltaTable\n",
+							"\n",
+							"silver_path = \"abfss://synapse-filename@synapase.dfs.core.windows.net/silver/customer\"\n",
+							"gold_path = \"abfss://synapse-filename@synapase.dfs.core.windows.net/gold/customer_scd2\"\n",
+							"\n",
+							"silver_df = spark.read.format(\"delta\").load(silver_path)\n",
+							"\n",
+							"silver_df.show(truncate=False)"
+						],
+						"outputs": [],
+						"execution_count": 12
+					},
+					{
+						"cell_type": "code",
+						"metadata": {},
+						"source": [
+							"\"\"\"implement scd2 first timein silver layer\"\"\"\n",
+							"gold_df = (\n",
+							"    silver_df\n",
+							"    .withColumn(\"start_date\", F.to_date(\"updated_at\"))\n",
+							"    .withColumn(\"end_date\", F.lit(None).cast(\"date\"))\n",
+							"    .withColumn(\"is_current\", F.lit(True))\n",
+							")\n",
+							"\n",
+							"gold_df.write \\\n",
+							"    .format(\"delta\") \\\n",
+							"    .mode(\"overwrite\") \\\n",
+							"    .save(gold_path)"
+						],
+						"outputs": [],
+						"execution_count": 15
+					},
+					{
+						"cell_type": "code",
+						"metadata": {},
+						"source": [
+							"gold_table = DeltaTable.forPath(spark, gold_path)\n",
+							"\n",
+							"gold_table.alias(\"tgt\").merge(\n",
+							"    silver_df.alias(\"src\"),\n",
+							"    \"tgt.customer_id = src.customer_id AND tgt.is_current = true\"\n",
+							").whenMatchedUpdate(\n",
+							"    condition=\"\"\"\n",
+							"        NOT (tgt.customer_name <=> src.customer_name)\n",
+							"        OR NOT (tgt.city <=> src.city)\n",
+							"        OR NOT (tgt.state <=> src.state)\n",
+							"    \"\"\",\n",
+							"    set={\n",
+							"        \"end_date\": \"current_date()\",\n",
+							"        \"is_current\": \"false\"\n",
+							"    }\n",
+							").execute()"
+						],
+						"outputs": [],
+						"execution_count": 16
+					},
+					{
+						"cell_type": "code",
+						"metadata": {},
+						"source": [
+							"gold_table = DeltaTable.forPath(spark, gold_path)\n",
+							"\n",
+							"gold_table.alias(\"tgt\").merge(\n",
+							"    silver_df.alias(\"src\"),\n",
+							"    \"tgt.customer_id = src.customer_id AND tgt.is_current = true\"\n",
+							").whenNotMatchedInsert(\n",
+							"    values={\n",
+							"        \"customer_id\": \"src.customer_id\",\n",
+							"        \"customer_name\": \"src.customer_name\",\n",
+							"        \"city\": \"src.city\",\n",
+							"        \"state\": \"src.state\",\n",
+							"        \"created_at\": \"src.created_at\",\n",
+							"        \"updated_at\": \"src.updated_at\",\n",
+							"        \"start_date\": \"current_date()\",\n",
+							"        \"end_date\": \"CAST(NULL AS DATE)\",\n",
+							"        \"is_current\": \"true\"\n",
+							"    }\n",
+							").execute()"
+						],
+						"outputs": [],
+						"execution_count": 17
+					},
+					{
+						"cell_type": "code",
+						"metadata": {},
+						"source": [
+							"final_gold_df = spark.read.format(\"delta\").load(gold_path)\n",
+							"\n",
+							"final_gold_df.orderBy(\n",
+							"    \"customer_id\", \"start_date\"\n",
+							").show(truncate=False)"
+						],
+						"outputs": [],
+						"execution_count": 18
+					},
+					{
+						"cell_type": "code",
+						"metadata": {},
+						"source": [
+							"from pyspark.sql import functions as F\n",
+							"\n",
+							"silver_df = spark.read.format(\"delta\").load(silver_path)\n",
+							"\n",
+							"test_df = silver_df.withColumn(\n",
+							"    \"city\",\n",
+							"    F.when(\n",
+							"        F.col(\"customer_id\") == \"C001\",\n",
+							"        F.lit(\"Pune\")\n",
+							"    ).otherwise(F.col(\"city\"))\n",
+							").withColumn(\n",
+							"    \"updated_at\",\n",
+							"    F.when(\n",
+							"        F.col(\"customer_id\") == \"C001\",\n",
+							"        F.lit(\"2026-10-28T10:00:00\")\n",
+							"    ).otherwise(F.col(\"updated_at\"))\n",
+							")\n",
+							"\n",
+							"test_df.write \\\n",
+							"    .format(\"delta\") \\\n",
+							"    .mode(\"overwrite\") \\\n",
+							"    .save(silver_path)"
+						],
+						"outputs": [],
+						"execution_count": 19
+					},
+					{
+						"cell_type": "code",
+						"metadata": {},
+						"source": [
+							"from delta.tables import DeltaTable\n",
+							"\n",
+							"gold_table = DeltaTable.forPath(spark, gold_path)\n",
+							"\n",
+							"silver_df = spark.read.format(\"delta\").load(silver_path)\n",
+							"\n",
+							"gold_table.alias(\"tgt\").merge(\n",
+							"    silver_df.alias(\"src\"),\n",
+							"    \"tgt.customer_id = src.customer_id AND tgt.is_current = true\"\n",
+							").whenMatchedUpdate(\n",
+							"    condition=\"\"\"\n",
+							"        NOT (tgt.customer_name <=> src.customer_name)\n",
+							"        OR NOT (tgt.city <=> src.city)\n",
+							"        OR NOT (tgt.state <=> src.state)\n",
+							"    \"\"\",\n",
+							"    set={\n",
+							"        \"end_date\": \"current_date()\",\n",
+							"        \"is_current\": \"false\"\n",
+							"    }\n",
+							").execute()"
+						],
+						"outputs": [],
+						"execution_count": 20
+					},
+					{
+						"cell_type": "code",
+						"metadata": {},
+						"source": [
+							"gold_table = DeltaTable.forPath(spark, gold_path)\n",
+							"\n",
+							"gold_table.alias(\"tgt\").merge(\n",
+							"    silver_df.alias(\"src\"),\n",
+							"    \"tgt.customer_id = src.customer_id AND tgt.is_current = true\"\n",
+							").whenNotMatchedInsert(\n",
+							"    values={\n",
+							"        \"customer_id\": \"src.customer_id\",\n",
+							"        \"customer_name\": \"src.customer_name\",\n",
+							"        \"city\": \"src.city\",\n",
+							"        \"state\": \"src.state\",\n",
+							"        \"created_at\": \"src.created_at\",\n",
+							"        \"updated_at\": \"src.updated_at\",\n",
+							"        \"start_date\": \"current_date()\",\n",
+							"        \"end_date\": \"CAST(NULL AS DATE)\",\n",
+							"        \"is_current\": \"true\"\n",
+							"    }\n",
+							").execute()"
+						],
+						"outputs": [],
+						"execution_count": 21
+					},
+					{
+						"cell_type": "code",
+						"metadata": {},
+						"source": [
+							"from pyspark.sql import functions as F\n",
+							"\n",
+							"gold_path = \"abfss://synapse-filename@synapase.dfs.core.windows.net/gold/customer_scd2\"\n",
+							"\n",
+							"final_gold_df = spark.read.format(\"delta\").load(gold_path)\n",
+							"\n",
+							"final_gold_df.orderBy(\n",
+							"    \"customer_id\", \"start_date\"\n",
+							").show(truncate=False)"
+						],
+						"outputs": [],
+						"execution_count": 22
+					},
+					{
+						"cell_type": "code",
+						"metadata": {},
+						"source": [
+							"final_gold_df.filter(\n",
+							"    F.col(\"customer_id\") == \"C001\"\n",
+							").orderBy(\"start_date\").show(truncate=False)"
+						],
+						"outputs": [],
+						"execution_count": 23
+					}
+				]
+			},
+			"dependsOn": []
+		},
+		{
 			"name": "[concat(parameters('workspaceName'), '/silver_to_gold_folder_in delta_layer')]",
 			"type": "Microsoft.Synapse/workspaces/notebooks",
 			"apiVersion": "2019-06-01-preview",
@@ -1587,16 +1914,12 @@
 			"location": "centralindia"
 		},
 		{
-			"name": "[concat(parameters('workspaceName'), '/scd2-implemntation_bronze_Silver_gold')]",
+			"name": "[concat(parameters('workspaceName'), '/scd2_small')]",
 			"type": "Microsoft.Synapse/workspaces/notebooks",
 			"apiVersion": "2019-06-01-preview",
 			"properties": {
 				"nbformat": 4,
 				"nbformat_minor": 2,
-				"bigDataPool": {
-					"referenceName": "sparkpool",
-					"type": "BigDataPoolReference"
-				},
 				"sessionProperties": {
 					"driverMemory": "28g",
 					"driverCores": 4,
@@ -1607,7 +1930,7 @@
 						"spark.dynamicAllocation.enabled": "false",
 						"spark.dynamicAllocation.minExecutors": "2",
 						"spark.dynamicAllocation.maxExecutors": "2",
-						"spark.autotune.trackingId": "f223a8f5-59e3-470d-a5f2-852b1591fb72"
+						"spark.autotune.trackingId": "3f7ec720-3653-49c8-9bae-07232b8d5375"
 					}
 				},
 				"metadata": {
@@ -1615,88 +1938,22 @@
 					"enableDebugMode": false,
 					"kernelspec": {
 						"name": "synapse_pyspark",
-						"display_name": "Synapse PySpark"
+						"display_name": "python"
 					},
 					"language_info": {
 						"name": "python"
-					},
-					"a365ComputeOptions": {
-						"id": "/subscriptions/a18b1a9d-1b3c-449a-b890-10e1ea988a8b/resourceGroups/adf_resouce_group/providers/Microsoft.Synapse/workspaces/azure-snyapse/bigDataPools/sparkpool",
-						"name": "sparkpool",
-						"type": "Spark",
-						"endpoint": "https://azure-snyapse.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/sparkpool",
-						"auth": {
-							"type": "AAD",
-							"authResource": "https://dev.azuresynapse.net"
-						},
-						"sparkVersion": "3.5",
-						"nodeCount": 10,
-						"cores": 4,
-						"memory": 28,
-						"extraHeader": {},
-						"automaticScaleJobs": false
 					},
 					"sessionKeepAliveTimeout": 30
 				},
 				"cells": [
 					{
 						"cell_type": "code",
-						"metadata": {
-							"collapsed": false
-						},
-						"source": [
-							"\"\"\"read data in adlsgen2 container\"\"\"\n",
-							"source_path = \"abfss://synapse-filename@synapase.dfs.core.windows.net/input/Customer.csv\"\n",
-							"\n",
-							"df = spark.read \\\n",
-							"    .option(\"header\", \"true\") \\\n",
-							"    .csv(source_path)\n",
-							"\n",
-							"display(df)"
-						],
-						"outputs": [],
-						"execution_count": 2
-					},
-					{
-						"cell_type": "code",
 						"metadata": {},
 						"source": [
-							"\"\"\"save data inbronze layer\"\"\"\n",
-							"bronze_path=\"abfss://synapse-filename@synapase.dfs.core.windows.net/bronze/customer\"\n",
-							"df.write \\\n",
-							".mode(\"overwrite\") \\\n",
-							".parquet(bronze_path)"
+							""
 						],
 						"outputs": [],
-						"execution_count": 3
-					},
-					{
-						"cell_type": "code",
-						"metadata": {
-							"collapsed": false
-						},
-						"source": [
-							"\"\"\"raed bronze layer\"\"\"\n",
-							"bronze_df=spark.read.parquet(bronze_path)\n",
-							"display(bronze_df)"
-						],
-						"outputs": [],
-						"execution_count": 4
-					},
-					{
-						"cell_type": "code",
-						"metadata": {},
-						"source": [
-							"\"\"\"save data in silver andcarete delta tabel\"\"\"\n",
-							"silver_df=bronze_df.drop_duplicates([\"customer_id\"])\n",
-							"silver_path=\"abfss://synapse-filename@synapase.dfs.core.windows.net/silver/customer\"\n",
-							"silver_df.write \\\n",
-							".format(\"Delta\")\\\n",
-							".mode(\"overwrite\") \\\n",
-							".save(silver_path)"
-						],
-						"outputs": [],
-						"execution_count": 5
+						"execution_count": null
 					}
 				]
 			},
