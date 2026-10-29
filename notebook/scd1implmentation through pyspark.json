@@ -1,0 +1,131 @@
+{
+	"name": "scd1implmentation through pyspark",
+	"properties": {
+		"nbformat": 4,
+		"nbformat_minor": 2,
+		"bigDataPool": {
+			"referenceName": "sparkpool",
+			"type": "BigDataPoolReference"
+		},
+		"sessionProperties": {
+			"driverMemory": "28g",
+			"driverCores": 4,
+			"executorMemory": "28g",
+			"executorCores": 4,
+			"numExecutors": 2,
+			"conf": {
+				"spark.dynamicAllocation.enabled": "false",
+				"spark.dynamicAllocation.minExecutors": "2",
+				"spark.dynamicAllocation.maxExecutors": "2",
+				"spark.autotune.trackingId": "403e9fd1-6990-47dc-a6e8-ec208abb8ec4"
+			}
+		},
+		"metadata": {
+			"saveOutput": true,
+			"enableDebugMode": false,
+			"kernelspec": {
+				"name": "synapse_pyspark",
+				"display_name": "Synapse PySpark"
+			},
+			"language_info": {
+				"name": "python"
+			},
+			"a365ComputeOptions": {
+				"id": "/subscriptions/a18b1a9d-1b3c-449a-b890-10e1ea988a8b/resourceGroups/adf_resouce_group/providers/Microsoft.Synapse/workspaces/azure-snyapse/bigDataPools/sparkpool",
+				"name": "sparkpool",
+				"type": "Spark",
+				"endpoint": "https://azure-snyapse.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/sparkpool",
+				"auth": {
+					"type": "AAD",
+					"authResource": "https://dev.azuresynapse.net"
+				},
+				"sparkVersion": "3.5",
+				"nodeCount": 10,
+				"cores": 4,
+				"memory": 28,
+				"automaticScaleJobs": false
+			},
+			"sessionKeepAliveTimeout": 30
+		},
+		"cells": [
+			{
+				"cell_type": "code",
+				"source": [
+					"from pyspark.sql import functions as F\n",
+					"\n",
+					"target_data=[(\"1\",\"manu\",\"pune\"),\n",
+					"(\"2\",\"nitesh\",\"banglore\"),\n",
+					"(\"3\",\"micky\",\"punjab\")\n",
+					"]\n",
+					"\n",
+					"columns=[\"dealer_id\",\"name\",\"city\"]\n",
+					"target_df=spark.createDataFrame(target_data,columns)\n",
+					"target_df.show()"
+				],
+				"execution_count": 23
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"\"\"\"craete source data\"\"\"\n",
+					"source_data=[(\"1\",\"manu\",\"nagpur\"),\n",
+					"(\"4\",\"yaskshit\",\"kannda\")]\n",
+					"\n",
+					"source_data=spark.createDataFrame(source_data,columns)\n",
+					"\n",
+					"source_data.show()"
+				],
+				"execution_count": 24
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"\"\"\"save target data in a delta table\"\"\"\n",
+					"target_df.write \\\n",
+					".format(\"delta\")\\\n",
+					".mode(\"overwrite\")\\\n",
+					".saveAsTable(\"dim_dealer\")"
+				],
+				"execution_count": 25
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"from delta.tables import DeltaTable\n",
+					"\n",
+					"target_df.write.format(\"delta\").mode(\"overwrite\").saveAsTable(\"Dim_Dealer\")\n",
+					"\n",
+					"target_table = DeltaTable.forName(spark, \"Dim_Dealer\")\n",
+					"\n",
+					"(\n",
+					"    target_table.alias(\"T\")\n",
+					"    .merge(\n",
+					"        source_data.alias(\"S\"),\n",
+					"        \"T.dealer_id = S.dealer_id\"\n",
+					"    )\n",
+					"    .whenMatchedUpdate(set={\n",
+					"        \"name\": \"S.name\",\n",
+					"        \"city\": \"S.city\"\n",
+					"    })\n",
+					"    .whenNotMatchedInsert(values={\n",
+					"        \"dealer_id\": \"S.dealer_id\",\n",
+					"        \"name\": \"S.name\",\n",
+					"        \"city\": \"S.city\"\n",
+					"    })\n",
+					"    .execute()\n",
+					")\n",
+					"\n",
+					"spark.table(\"Dim_Dealer\").show()"
+				],
+				"execution_count": 27
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"spark.read.table(\"dim_dealer\").orderBy(\"dealer_id\").show()"
+				],
+				"execution_count": 28
+			}
+		]
+	}
+}
