@@ -1,0 +1,17 @@
+{
+	"name": "scd_implmnet in sql",
+	"properties": {
+		"content": {
+			"query": "CREATE TABLE dbo.Dim_Dealer\n(\n    dealer_id VARCHAR(10) NOT NULL,\n    dealer_name VARCHAR(50),\n    city VARCHAR(50)\n)\nWITH\n(\n    DISTRIBUTION = HASH(dealer_id),\n    HEAP\n);\n\nselect * from dim_dealer;\n\n\nINSERT INTO dim_dealer  VALUES (1, 'Amit',  'Pune');\nINSERT INTO dim_dealer VALUES (2, 'Neha',  'Mumbai');\nINSERT INTO dim_dealer VALUES (3, 'vikram',  'bnglore');\nINSERT INTO dim_dealer VALUES(4, 'abhilasha',  'karnataka');\nINSERT INTO dim_dealer VALUES (5, 'kavaa',  'maysour');\ndrop table stg_dealer\n\nCREATE TABLE dbo.Stg_Dealer\n(\n    dealer_id VARCHAR(10),\n    dealer_name VARCHAR(50),\n    city VARCHAR(50)\n)\nWITH\n(\n    DISTRIBUTION = ROUND_ROBIN,\n    HEAP\n);\n\nINSERT INTO stg_dealer  VALUES (1, 'Amit',  'mumbai');\nINSERT INTO stg_dealer  VALUES (6, 'karan',  'muranaa');\n\nselect * from stg_dealer;\n\n\n---implement scd1 using merge --\n\nMERGE INTO dbo.Dim_Dealer AS T\nUSING dbo.Stg_Dealer AS S\nON T.dealer_id = S.dealer_id\n\nWHEN MATCHED THEN\n    UPDATE SET\n        T.dealer_name = S.dealer_name,\n        T.city = S.city\n\nWHEN NOT MATCHED BY TARGET THEN\n    INSERT (dealer_id, dealer_name, city)\n    VALUES (S.dealer_id, S.dealer_name, S.city);\n\n\n    ---validate the result---\n    SELECT *\nFROM dbo.Dim_Dealer\nORDER BY dealer_id;",
+			"metadata": {
+				"language": "sql"
+			},
+			"currentConnection": {
+				"databaseName": "sql_pool",
+				"poolName": "sql_pool"
+			},
+			"resultLimit": 5000
+		},
+		"type": "SqlQuery"
+	}
+}
